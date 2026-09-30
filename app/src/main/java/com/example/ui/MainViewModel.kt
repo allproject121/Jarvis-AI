@@ -8,6 +8,11 @@ import com.example.JarvisApp
 import com.example.data.model.CommandRecord
 import com.example.data.model.EntityRecord
 import com.example.data.model.PatternRecord
+import com.example.data.repository.CommandRepository
+import com.example.data.repository.EntityRepository
+import com.example.data.repository.JarvisRepository
+import com.example.data.repository.PatternRepository
+import com.example.di.AppContainer
 import com.example.execution.ExecutionEngine
 import com.example.execution.PlanExecutionStatus
 import com.example.gemini.ApiKeyInvalidException
@@ -50,10 +55,15 @@ data class GeneratedImageItem(
     val timestamp: Long = System.currentTimeMillis()
 )
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
+class MainViewModel(
+    application: Application,
+    private val appContainer: AppContainer = (application as JarvisApp).container
+) : AndroidViewModel(application) {
 
-    private val app = application as JarvisApp
-    val repository = app.repository
+    val repository: JarvisRepository = appContainer.jarvisRepository
+    val commandRepository: CommandRepository = appContainer.commandRepository
+    val patternRepository: PatternRepository = appContainer.patternRepository
+    val entityRepository: EntityRepository = appContainer.entityRepository
 
     // Engines
     val voiceInputManager = VoiceInputManager(application, viewModelScope)

@@ -6,55 +6,74 @@ import com.example.data.model.EntityRecord
 import com.example.data.model.PatternRecord
 import kotlinx.coroutines.flow.Flow
 
-class JarvisRepository(private val database: AppDatabase) {
+/**
+ * Unified application repository that coordinates domain repositories
+ * (CommandRepository, PatternRepository, EntityRepository) and provides
+ * backward compatibility for existing features.
+ */
+class JarvisRepository(
+    val commandRepository: CommandRepository,
+    val patternRepository: PatternRepository,
+    val entityRepository: EntityRepository,
+    val database: AppDatabase? = null
+) {
 
-    val allCommands: Flow<List<CommandRecord>> = database.commandDao().getAllCommands()
-    val recentCommands: Flow<List<CommandRecord>> = database.commandDao().getRecentCommands(15)
-    val allPatterns: Flow<List<PatternRecord>> = database.patternDao().getAllPatterns()
-    val allEntities: Flow<List<EntityRecord>> = database.entityDao().getAllEntities()
+    /**
+     * Convenience constructor creating default repository implementations from an AppDatabase instance.
+     */
+    constructor(database: AppDatabase) : this(
+        commandRepository = DefaultCommandRepository(database.commandDAO()),
+        patternRepository = DefaultPatternRepository(database.patternDAO()),
+        entityRepository = DefaultEntityRepository(database.entityDAO()),
+        database = database
+    )
+
+    val allCommands: Flow<List<CommandRecord>> = commandRepository.allCommands
+    val recentCommands: Flow<List<CommandRecord>> = commandRepository.getRecentCommands(15)
+    val allPatterns: Flow<List<PatternRecord>> = patternRepository.allPatterns
+    val allEntities: Flow<List<EntityRecord>> = entityRepository.allEntities
 
     suspend fun recordCommand(command: CommandRecord): Long {
-        return database.commandDao().insertCommand(command)
+        return commandRepository.recordCommand(command)
     }
 
     suspend fun updateFeedback(id: Long, feedback: String) {
-        database.commandDao().updateFeedback(id, feedback)
+        commandRepository.updateFeedback(id, feedback)
     }
 
     suspend fun clearHistory() {
-        database.commandDao().clearHistory()
+        commandRepository.clearHistory()
     }
 
     suspend fun insertPattern(pattern: PatternRecord): Long {
-        return database.patternDao().insertPattern(pattern)
+        return patternRepository.insertPattern(pattern)
     }
 
     suspend fun setPatternEnabled(id: Long, enabled: Boolean) {
-        database.patternDao().setEnabled(id, enabled)
+        patternRepository.setPatternEnabled(id, enabled)
     }
 
     suspend fun setPatternAutoExecute(id: Long, autoExecute: Boolean) {
-        database.patternDao().setAutoExecute(id, autoExecute)
+        patternRepository.setPatternAutoExecute(id, autoExecute)
     }
 
     suspend fun deletePattern(pattern: PatternRecord) {
-        database.patternDao().deletePattern(pattern)
+        patternRepository.deletePattern(pattern)
     }
 
     suspend fun findEntityByName(name: String): EntityRecord? {
-        return database.entityDao().findEntityByName(name)
+        return entityRepository.findEntityByName(name)
     }
 
     suspend fun insertEntity(entity: EntityRecord): Long {
-        return database.entityDao().insertEntity(entity)
+        return entityRepository.insertEntity(entity)
     }
 
     suspend fun markEntityAccessed(id: Long) {
-        database.entityDao().markAccessed(id)
+        entityRepository.markEntityAccessed(id)
     }
 
     suspend fun seedDefaultsIfEmpty() {
-        // Seed helpful initial patterns if empty
         val initialPatterns = listOf(
             PatternRecord(
                 patternType = "DAILY_ROUTINE",
@@ -158,10 +177,10 @@ class JarvisRepository(private val database: AppDatabase) {
         )
 
         for (pattern in initialPatterns) {
-            database.patternDao().insertPattern(pattern)
+            patternRepository.insertPattern(pattern)
         }
         for (entity in initialEntities) {
-            database.entityDao().insertEntity(entity)
+            entityRepository.insertEntity(entity)
         }
     }
 }
