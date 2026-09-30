@@ -1,12 +1,12 @@
 package com.example.data.repository
 
-import com.example.data.JarvisDatabase
+import com.example.data.AppDatabase
 import com.example.data.model.CommandRecord
 import com.example.data.model.EntityRecord
 import com.example.data.model.PatternRecord
 import kotlinx.coroutines.flow.Flow
 
-class JarvisRepository(private val database: JarvisDatabase) {
+class JarvisRepository(private val database: AppDatabase) {
 
     val allCommands: Flow<List<CommandRecord>> = database.commandDao().getAllCommands()
     val recentCommands: Flow<List<CommandRecord>> = database.commandDao().getRecentCommands(15)

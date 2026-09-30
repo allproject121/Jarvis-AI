@@ -3,9 +3,9 @@ package com.example
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.example.data.AppDatabase
 import com.example.data.CommandDAO
 import com.example.data.EntityDAO
-import com.example.data.JarvisDatabase
 import com.example.data.PatternDAO
 import com.example.data.model.CommandRecord
 import com.example.data.model.EntityRecord
@@ -27,7 +27,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [36])
 class DaoTest {
 
-    private lateinit var db: JarvisDatabase
+    private lateinit var db: AppDatabase
     private lateinit var commandDao: CommandDAO
     private lateinit var patternDao: PatternDAO
     private lateinit var entityDao: EntityDAO
@@ -35,7 +35,7 @@ class DaoTest {
     @Before
     fun createDb() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        db = Room.inMemoryDatabaseBuilder(context, JarvisDatabase::class.java)
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
         commandDao = db.commandDAO()
