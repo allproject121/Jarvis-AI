@@ -9,6 +9,7 @@ import android.media.AudioTrack
 import android.speech.tts.TextToSpeech
 import android.util.Base64
 import com.example.BuildConfig
+import com.example.data.AppPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -17,8 +18,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
-import java.io.FileOutputStream
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -31,6 +30,9 @@ data class ChatMessage(
     val imageBitmap: Bitmap? = null
 )
 
+class ApiKeyMissingException(message: String = "Gemini API key is not configured.") : Exception(message)
+class ApiKeyInvalidException(message: String = "Gemini API key is invalid or rejected by Google.") : Exception(message)
+
 class GeminiClient(private val context: Context) {
 
     private val client = OkHttpClient.Builder()
@@ -39,8 +41,69 @@ class GeminiClient(private val context: Context) {
         .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    private val apiKey: String
-        get() = BuildConfig.GEMINI_API_KEY.ifEmpty { "MY_GEMINI_API_KEY" }
+    val preferences = AppPreferences(context)
+
+    fun isValidKeyCandidate(key: String): Boolean {
+        val trimmed = key.trim()
+        if (trimmed.isBlank()) return false
+        if (trimmed == "MY_GEMINI_API_KEY" || trimmed == "YOUR_API_KEY") return false
+        if (trimmed.equals("null", ignoreCase = true) || trimmed.equals("undefined", ignoreCase = true)) return false
+        return trimmed.length >= 10 && !trimmed.contains(" ")
+    }
+
+    fun getEffectiveApiKey(): String {
+        val custom = preferences.customApiKey.trim()
+        if (isValidKeyCandidate(custom)) {
+            return custom
+        }
+        val buildKey = BuildConfig.GEMINI_API_KEY.trim()
+        if (isValidKeyCandidate(buildKey)) {
+            return buildKey
+        }
+        return ""
+    }
+
+    fun isApiKeyConfigured(): Boolean {
+        return getEffectiveApiKey().isNotEmpty()
+    }
+
+    suspend fun validateApiKey(candidateKey: String): Result<String> = withContext(Dispatchers.IO) {
+        val key = candidateKey.trim()
+        if (!isValidKeyCandidate(key)) {
+            return@withContext Result.failure(
+                ApiKeyInvalidException("Invalid key format. Gemini API keys are typically ~39 characters long and start with 'AIzaSy'.")
+            )
+        }
+
+        try {
+            val root = JSONObject()
+            val contents = JSONArray()
+            val content = JSONObject()
+            val parts = JSONArray()
+            parts.put(JSONObject().put("text", "System ping check"))
+            content.put("parts", parts)
+            contents.put(content)
+            root.put("contents", contents)
+
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$key"
+            val body = root.toString().toRequestBody("application/json".toMediaType())
+            val request = Request.Builder().url(url).post(body).build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                if (responseBody.contains("API_KEY_INVALID") || responseBody.contains("API key not valid")) {
+                    return@withContext Result.failure(ApiKeyInvalidException("Google rejected this key: API key not valid."))
+                }
+                return@withContext Result.failure(Exception("Google API returned code ${response.code}"))
+            }
+
+            Result.success("Neural node connection verified! Key is active.")
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     private var nativeTts: TextToSpeech? = null
     private var isTtsInitialized = false
@@ -67,6 +130,20 @@ class GeminiClient(private val context: Context) {
         modelName: String = "gemini-3.5-flash",
         systemRolePrompt: String = "You are J.A.R.V.I.S., the ultimate intelligent phone automation system. Speak with concise, sophisticated British AI wit and utmost competence."
     ): Result<String> = withContext(Dispatchers.IO) {
+        val apiKey = getEffectiveApiKey()
+        if (apiKey.isEmpty()) {
+            val lastUserMsg = conversationHistory.lastOrNull { it.role == "user" }?.text?.lowercase() ?: ""
+            val offlineResponse = when {
+                lastUserMsg.contains("who are you") || lastUserMsg.contains("kya ho") ->
+                    "I am J.A.R.V.I.S., your autonomous phone automation assistant. All local device actions (WiFi, brightness, alarms, volume, messaging shortcuts, and accessibility automations) are operational.\n\nTo link Google's live neural reasoning models, configure your Gemini API Key in the **System** tab under **Gemini API Key Configuration**."
+                lastUserMsg.contains("wifi") || lastUserMsg.contains("brightness") || lastUserMsg.contains("alarm") || lastUserMsg.contains("message") ->
+                    "Direct phone automation detected. You can speak or trigger this directly on the Voice HUD tab to execute system workflows.\n\nTo enable cloud conversational AI, please enter your Gemini API Key in the **System** tab."
+                else ->
+                    "Sir, my core phone automation protocols and local engines are active. To enable live Gemini cloud neural cognition ($modelName), please enter your Gemini API Key in the **System** tab under 'Gemini API Key Configuration', or configure `GEMINI_API_KEY` in the AI Studio Secrets panel."
+            }
+            return@withContext Result.success(offlineResponse)
+        }
+
         try {
             val root = JSONObject()
 
@@ -97,6 +174,11 @@ class GeminiClient(private val context: Context) {
             val responseBody = response.body?.string() ?: ""
 
             if (!response.isSuccessful) {
+                if (responseBody.contains("API_KEY_INVALID") || responseBody.contains("API key not valid") || (response.code == 400 && responseBody.contains("API key", ignoreCase = true))) {
+                    return@withContext Result.failure(
+                        ApiKeyInvalidException("Google rejected the Gemini API key as invalid or expired. Please tap 'Configure Key' to update your API key.")
+                    )
+                }
                 return@withContext Result.failure(Exception("Gemini API error ($modelName): ${response.code} $responseBody"))
             }
 
@@ -126,6 +208,13 @@ class GeminiClient(private val context: Context) {
         imageSize: String = "1K", // "1K", "2K", "4K"
         aspectRatio: String = "1:1"
     ): Result<Bitmap> = withContext(Dispatchers.IO) {
+        val apiKey = getEffectiveApiKey()
+        if (apiKey.isEmpty()) {
+            return@withContext Result.failure(
+                Exception("Gemini API Key required for image generation. Please configure your API key in the System tab.")
+            )
+        }
+
         try {
             val root = JSONObject()
             val contents = JSONArray()
@@ -159,7 +248,7 @@ class GeminiClient(private val context: Context) {
 
             if (!response.isSuccessful) {
                 // Try fallback to standard flash image if pro-image preview is unavailable
-                return@withContext fallbackFlashImage(prompt, aspectRatio)
+                return@withContext fallbackFlashImage(prompt, aspectRatio, apiKey)
             }
 
             val jsonResponse = JSONObject(responseBody)
@@ -186,13 +275,13 @@ class GeminiClient(private val context: Context) {
                 }
             }
 
-            fallbackFlashImage(prompt, aspectRatio)
+            fallbackFlashImage(prompt, aspectRatio, apiKey)
         } catch (e: Exception) {
-            fallbackFlashImage(prompt, aspectRatio)
+            fallbackFlashImage(prompt, aspectRatio, apiKey)
         }
     }
 
-    private suspend fun fallbackFlashImage(prompt: String, aspectRatio: String): Result<Bitmap> = withContext(Dispatchers.IO) {
+    private suspend fun fallbackFlashImage(prompt: String, aspectRatio: String, apiKey: String): Result<Bitmap> = withContext(Dispatchers.IO) {
         try {
             val root = JSONObject()
             val contents = JSONArray()
@@ -242,6 +331,12 @@ class GeminiClient(private val context: Context) {
      * Falls back to native Android TTS for instant zero-latency speech output
      */
     suspend fun speakText(text: String, voiceName: String = "Kore"): Result<Boolean> = withContext(Dispatchers.IO) {
+        val apiKey = getEffectiveApiKey()
+        if (apiKey.isEmpty()) {
+            speakNativeTts(text)
+            return@withContext Result.success(true)
+        }
+
         try {
             // First attempt Gemini 3.8 Flash TTS
             val root = JSONObject()

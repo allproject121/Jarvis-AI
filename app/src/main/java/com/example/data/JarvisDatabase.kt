@@ -4,9 +4,6 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import com.example.data.dao.CommandDao
-import com.example.data.dao.EntityDao
-import com.example.data.dao.PatternDao
 import com.example.data.model.CommandRecord
 import com.example.data.model.EntityRecord
 import com.example.data.model.PatternRecord
@@ -17,9 +14,14 @@ import com.example.data.model.PatternRecord
     exportSchema = false
 )
 abstract class JarvisDatabase : RoomDatabase() {
-    abstract fun commandDao(): CommandDao
-    abstract fun patternDao(): PatternDao
-    abstract fun entityDao(): EntityDao
+    abstract fun commandDAO(): CommandDAO
+    abstract fun patternDAO(): PatternDAO
+    abstract fun entityDAO(): EntityDAO
+
+    // Convenience accessors mapping to the primary DAO functions
+    fun commandDao(): CommandDAO = commandDAO()
+    fun patternDao(): PatternDAO = patternDAO()
+    fun entityDao(): EntityDAO = entityDAO()
 
     companion object {
         @Volatile

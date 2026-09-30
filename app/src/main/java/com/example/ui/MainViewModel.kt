@@ -10,6 +10,8 @@ import com.example.data.model.EntityRecord
 import com.example.data.model.PatternRecord
 import com.example.execution.ExecutionEngine
 import com.example.execution.PlanExecutionStatus
+import com.example.gemini.ApiKeyInvalidException
+import com.example.gemini.ApiKeyMissingException
 import com.example.gemini.ChatMessage
 import com.example.gemini.GeminiClient
 import com.example.learning.PatternRecognitionEngine
@@ -118,6 +120,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _selectedImageResolution = MutableStateFlow("1K") // "1K", "2K", "4K"
     val selectedImageResolution: StateFlow<String> = _selectedImageResolution.asStateFlow()
+
+    // API Key State & Verification
+    private val _customApiKey = MutableStateFlow(geminiClient.preferences.customApiKey)
+    val customApiKey: StateFlow<String> = _customApiKey.asStateFlow()
+
+    private val _isApiKeyConfigured = MutableStateFlow(geminiClient.isApiKeyConfigured())
+    val isApiKeyConfigured: StateFlow<Boolean> = _isApiKeyConfigured.asStateFlow()
+
+    private val _showApiKeyDialog = MutableStateFlow(false)
+    val showApiKeyDialog: StateFlow<Boolean> = _showApiKeyDialog.asStateFlow()
+
+    private val _isKeyTesting = MutableStateFlow(false)
+    val isKeyTesting: StateFlow<Boolean> = _isKeyTesting.asStateFlow()
+
+    private val _keyTestStatus = MutableStateFlow<String?>(null)
+    val keyTestStatus: StateFlow<String?> = _keyTestStatus.asStateFlow()
+
+    fun openApiKeyDialog() {
+        _showApiKeyDialog.value = true
+    }
+
+    fun closeApiKeyDialog() {
+        _showApiKeyDialog.value = false
+        _keyTestStatus.value = null
+    }
+
+    fun setCustomApiKey(key: String) {
+        geminiClient.preferences.customApiKey = key
+        _customApiKey.value = key.trim()
+        _isApiKeyConfigured.value = geminiClient.isApiKeyConfigured()
+        _keyTestStatus.value = null
+    }
+
+    fun testAndSaveApiKey(key: String, onComplete: ((Boolean, String) -> Unit)? = null) {
+        viewModelScope.launch {
+            _isKeyTesting.value = true
+            _keyTestStatus.value = "Connecting to Google Gemini neural network..."
+            val result = geminiClient.validateApiKey(key)
+            _isKeyTesting.value = false
+            result.onSuccess { msg ->
+                setCustomApiKey(key)
+                _keyTestStatus.value = msg
+                onComplete?.invoke(true, msg)
+            }.onFailure { err ->
+                val errorMsg = err.message ?: "Key validation failed"
+                _keyTestStatus.value = errorMsg
+                onComplete?.invoke(false, errorMsg)
+            }
+        }
+    }
 
     init {
         setupVoiceListener()
@@ -279,8 +331,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // Optional voice readback of response
                 geminiClient.speakText(reply.take(150))
             }.onFailure { err ->
-                val errorMsg = ChatMessage(role = "model", text = "Error accessing neural node: ${err.message ?: "Network timeout"}")
-                _chatMessages.value = _chatMessages.value + errorMsg
+                if (err is ApiKeyInvalidException || err is ApiKeyMissingException) {
+                    _showApiKeyDialog.value = true
+                    val errorMsg = ChatMessage(
+                        role = "model",
+                        text = "⚠️ **Neural Core Link Required**\n\n${err.message}\n\nPlease paste a valid Google Gemini API Key into the setup card or System HUD to activate live neural cognition."
+                    )
+                    _chatMessages.value = _chatMessages.value + errorMsg
+                } else {
+                    val errorMsg = ChatMessage(role = "model", text = "Neural node warning: ${err.message ?: "Network timeout"}")
+                    _chatMessages.value = _chatMessages.value + errorMsg
+                }
             }
         }
     }
@@ -317,6 +378,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _generatedImages.value = listOf(item) + _generatedImages.value
                 geminiClient.speakText("Asset rendering complete, Sir.")
             }.onFailure { err ->
+                if (err is ApiKeyInvalidException || err is ApiKeyMissingException) {
+                    _showApiKeyDialog.value = true
+                }
                 geminiClient.speakText("Image rendering encountered an issue: ${err.message}")
             }
         }

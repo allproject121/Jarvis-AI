@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,14 +49,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.gemini.ChatMessage
+import com.example.ui.JarvisTab
+import com.example.ui.components.ApiKeyConfigurationDialog
 import com.example.ui.theme.JarvisBackground
 import com.example.ui.theme.JarvisCardBorder
 import com.example.ui.theme.JarvisCyan
+import com.example.ui.theme.JarvisOrange
+import com.example.ui.theme.JarvisSuccess
 import com.example.ui.theme.JarvisSurface
 import com.example.ui.theme.JarvisSurfaceVariant
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Card
 
 @Composable
 fun ChatScreen(
@@ -65,6 +73,8 @@ fun ChatScreen(
     val messages by viewModel.chatMessages.collectAsStateWithLifecycle()
     val isThinking by viewModel.isChatThinking.collectAsStateWithLifecycle()
     val selectedModel by viewModel.selectedChatModel.collectAsStateWithLifecycle()
+    val isApiKeyConfigured by viewModel.isApiKeyConfigured.collectAsStateWithLifecycle()
+    val showApiKeyDialog by viewModel.showApiKeyDialog.collectAsStateWithLifecycle()
 
     var textInput by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -73,6 +83,13 @@ fun ChatScreen(
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
         }
+    }
+
+    if (showApiKeyDialog) {
+        ApiKeyConfigurationDialog(
+            viewModel = viewModel,
+            onDismiss = { viewModel.closeApiKeyDialog() }
+        )
     }
 
     val modelOptions = listOf(
@@ -105,12 +122,30 @@ fun ChatScreen(
                         color = TextSecondary,
                         letterSpacing = 1.sp
                     )
-                    Text(
-                        text = selectedModel,
-                        fontSize = 10.sp,
-                        color = JarvisCyan,
-                        fontWeight = FontWeight.SemiBold
-                    )
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isApiKeyConfigured) JarvisSuccess.copy(alpha = 0.15f) else JarvisOrange.copy(alpha = 0.2f))
+                            .clickable { viewModel.openApiKeyDialog() }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .testTag("api_key_status_pill")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Key,
+                            contentDescription = "API Key",
+                            tint = if (isApiKeyConfigured) JarvisSuccess else JarvisOrange,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isApiKeyConfigured) "NEURAL LINK ACTIVE" else "SET API KEY",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isApiKeyConfigured) JarvisSuccess else JarvisOrange
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -152,6 +187,56 @@ fun ChatScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Prominent API Key Banner when not configured
+        if (!isApiKeyConfigured) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .testTag("api_key_prompt_card"),
+                colors = CardDefaults.cardColors(containerColor = JarvisSurface),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, JarvisOrange)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Key,
+                                contentDescription = null,
+                                tint = JarvisOrange,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "GEMINI API KEY REQUIRED",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = JarvisOrange
+                            )
+                        }
+                        TextButton(
+                            onClick = { viewModel.openApiKeyDialog() },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text("Configure Key", fontSize = 11.sp, color = JarvisCyan, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Text(
+                        text = "Live cognition ($selectedModel) requires a valid Gemini API key. Phone automation & system actions remain operational offline.",
+                        fontSize = 11.sp,
+                        color = TextSecondary,
+                        lineHeight = 15.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
                 }
             }
         }

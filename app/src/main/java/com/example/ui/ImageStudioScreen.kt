@@ -52,13 +52,17 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.theme.JarvisBackground
 import com.example.ui.theme.JarvisCardBorder
+import com.example.ui.components.ApiKeyConfigurationDialog
 import com.example.ui.theme.JarvisCyan
 import com.example.ui.theme.JarvisOrange
+import com.example.ui.theme.JarvisSuccess
 import com.example.ui.theme.JarvisSurface
 import com.example.ui.theme.JarvisSurfaceVariant
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.Key
 
 @Composable
 fun ImageStudioScreen(
@@ -68,9 +72,18 @@ fun ImageStudioScreen(
     val generatedImages by viewModel.generatedImages.collectAsStateWithLifecycle()
     val isGenerating by viewModel.isGeneratingImage.collectAsStateWithLifecycle()
     val selectedResolution by viewModel.selectedImageResolution.collectAsStateWithLifecycle()
+    val isApiKeyConfigured by viewModel.isApiKeyConfigured.collectAsStateWithLifecycle()
+    val showApiKeyDialog by viewModel.showApiKeyDialog.collectAsStateWithLifecycle()
 
     var promptText by remember { mutableStateOf("Futuristic JARVIS holographic interface with glowing cyber circuitry") }
     var selectedRatio by remember { mutableStateOf("1:1") }
+
+    if (showApiKeyDialog) {
+        ApiKeyConfigurationDialog(
+            viewModel = viewModel,
+            onDismiss = { viewModel.closeApiKeyDialog() }
+        )
+    }
 
     val resolutionOptions = listOf("1K", "2K", "4K")
     val ratioOptions = listOf("1:1", "16:9", "4:3")
@@ -90,19 +103,91 @@ fun ImageStudioScreen(
         contentPadding = PaddingValues(vertical = 16.dp)
     ) {
         item {
-            Text(
-                text = "NEURAL VISUAL STUDIO",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Black,
-                color = JarvisCyan,
-                letterSpacing = 1.sp
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "NEURAL VISUAL STUDIO",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    color = JarvisCyan,
+                    letterSpacing = 1.sp
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isApiKeyConfigured) JarvisSuccess.copy(alpha = 0.15f) else JarvisOrange.copy(alpha = 0.2f))
+                        .clickable { viewModel.openApiKeyDialog() }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .testTag("image_studio_api_key_pill")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Key,
+                        contentDescription = "API Key",
+                        tint = if (isApiKeyConfigured) JarvisSuccess else JarvisOrange,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isApiKeyConfigured) "LINKED" else "SET KEY",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isApiKeyConfigured) JarvisSuccess else JarvisOrange
+                    )
+                }
+            }
             Text(
                 text = "Model: gemini-3-pro-image-preview • Ultra high resolution rendering",
                 fontSize = 12.sp,
                 color = TextSecondary,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.padding(bottom = 12.dp)
             )
+        }
+
+        if (!isApiKeyConfigured) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .testTag("image_studio_key_prompt"),
+                    colors = CardDefaults.cardColors(containerColor = JarvisSurface),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, JarvisOrange)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "GEMINI API KEY REQUIRED",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = JarvisOrange
+                            )
+                            Text(
+                                text = "Image generation models require an active Gemini API key.",
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
+                        }
+                        TextButton(
+                            onClick = { viewModel.openApiKeyDialog() },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text("Configure", fontSize = 11.sp, color = JarvisCyan, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
         }
 
         // Generator Studio Card
