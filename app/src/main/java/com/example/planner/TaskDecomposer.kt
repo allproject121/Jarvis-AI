@@ -263,6 +263,20 @@ class TaskDecomposer {
                 }
             }
 
+            JarvisIntent.LOCK_UNLOCK_SCREEN -> {
+                val isUnlock = nlpResult.originalText.lowercase().contains("unlock")
+                tasks.add(
+                    Task(
+                        id = "${planId}_1",
+                        name = if (isUnlock) "Unlock Device Screen" else "Engage Security Screen Lock",
+                        description = if (isUnlock) "Request credentials & awaken system display" else "Dim display and trigger system keyguard lock",
+                        actionType = if (isUnlock) "UNLOCK_SCREEN" else "LOCK_SCREEN",
+                        parameters = mapOf("action" to if (isUnlock) "UNLOCK" else "LOCK"),
+                        riskLevel = RiskLevel.LOW
+                    )
+                )
+            }
+
             else -> {
                 // Generic query / task execution
                 tasks.add(

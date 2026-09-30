@@ -7,8 +7,10 @@ import com.example.data.repository.DefaultCommandRepository
 import com.example.data.repository.DefaultEntityRepository
 import com.example.data.repository.DefaultPatternRepository
 import com.example.data.repository.EntityRepository
+import com.example.data.repository.FirebaseWorkflowRepository
 import com.example.data.repository.JarvisRepository
 import com.example.data.repository.PatternRepository
+import com.example.data.repository.WorkflowGenerationRepository
 
 /**
  * Production implementation of [AppContainer] providing thread-safe,
@@ -39,5 +41,9 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
             entityRepository = entityRepository,
             database = appDatabase
         )
+    }
+
+    override val workflowGenerationRepository: WorkflowGenerationRepository by lazy {
+        FirebaseWorkflowRepository()
     }
 }

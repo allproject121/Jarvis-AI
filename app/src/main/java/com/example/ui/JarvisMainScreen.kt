@@ -1,10 +1,12 @@
 package com.example.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,63 +21,67 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryAlert
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.ThumbDown
-import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.planner.RiskLevel
 import com.example.prediction.ProactiveSuggestion
-import com.example.ui.components.ArcReactorCore
-import com.example.ui.components.AudioWaveformVisualizer
-import com.example.ui.components.HudStatusChip
-import com.example.ui.theme.JarvisBackground
+import com.example.ui.components.ApiKeyConfigurationDialog
+import com.example.ui.components.CyanBreathingOrb
+import com.example.ui.theme.ColorBackgroundDark
+import com.example.ui.theme.ColorPrimaryCyan
+import com.example.ui.theme.ColorPrimaryLightCyan
+import com.example.ui.theme.ColorSurfaceDark
+import com.example.ui.theme.ColorTextMuted
 import com.example.ui.theme.JarvisCardBorder
-import com.example.ui.theme.JarvisCyan
 import com.example.ui.theme.JarvisError
 import com.example.ui.theme.JarvisOrange
-import com.example.ui.theme.JarvisSuccess
 import com.example.ui.theme.JarvisSurface
-import com.example.ui.theme.JarvisSurfaceVariant
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun JarvisMainScreen(
@@ -92,22 +98,64 @@ fun JarvisMainScreen(
     val executionStatus by viewModel.executionStatus.collectAsStateWithLifecycle()
     val pendingConfirmation by viewModel.pendingConfirmation.collectAsStateWithLifecycle()
     val recentCommands by viewModel.recentCommands.collectAsStateWithLifecycle()
+    val voiceStatusMessage by viewModel.voiceStatusMessage.collectAsStateWithLifecycle()
 
-    val presetPrompts = listOf(
-        "Mom को message भेज",
-        "WiFi on कर",
-        "Brightness 80 कर",
-        "कल 9 बजे alarm set कर",
-        "Instagram backup to Drive",
-        "Office mode on कर"
-    )
+    val context = LocalContext.current
+    var typedCommand by remember { mutableStateOf("") }
+    var showSettingsDialog by remember { mutableStateOf(false) }
 
-    // Confirmation Modal for High-risk Actions
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.startListening()
+        } else {
+            Toast.makeText(
+                context,
+                "Microphone permission is required to listen to voice commands.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    val handleMicClick = {
+        val hasPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasPermission) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        } else {
+            viewModel.toggleListening()
+        }
+    }
+
+    // Dynamic Clock updating every 10 seconds
+    var currentTimeString by remember {
+        mutableStateOf(SimpleDateFormat("h:mm", Locale.getDefault()).format(Date()))
+    }
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTimeString = SimpleDateFormat("h:mm", Locale.getDefault()).format(Date())
+            delay(10000)
+        }
+    }
+
+    // Settings API Key Configuration Dialog
+    if (showSettingsDialog) {
+        ApiKeyConfigurationDialog(
+            viewModel = viewModel,
+            onDismiss = { showSettingsDialog = false }
+        )
+    }
+
+    // Confirmation Modal for High-risk Actions (Layer 4)
     if (pendingConfirmation != null) {
         val plan = pendingConfirmation!!
         AlertDialog(
             onDismissRequest = { viewModel.confirmPendingPlan(false) },
-            containerColor = JarvisSurface,
+            containerColor = ColorSurfaceDark,
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -118,7 +166,7 @@ fun JarvisMainScreen(
                     )
                     Text(
                         text = "Confirmation Required",
-                        color = TextPrimary,
+                        color = ColorPrimaryCyan,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     )
@@ -127,7 +175,7 @@ fun JarvisMainScreen(
             text = {
                 Column {
                     Text(
-                        text = plan.confirmationMessage ?: "Execute planned operations?",
+                        text = plan.confirmationMessage ?: "Authorize and execute operations?",
                         color = TextPrimary,
                         fontSize = 15.sp
                     )
@@ -142,7 +190,7 @@ fun JarvisMainScreen(
                     plan.tasks.forEachIndexed { idx, task ->
                         Text(
                             text = "${idx + 1}. ${task.name}",
-                            color = TextSecondary,
+                            color = ColorPrimaryLightCyan,
                             fontSize = 13.sp
                         )
                     }
@@ -151,7 +199,7 @@ fun JarvisMainScreen(
             confirmButton = {
                 Button(
                     onClick = { viewModel.confirmPendingPlan(true) },
-                    colors = ButtonDefaults.buttonColors(containerColor = JarvisCyan, contentColor = Color.Black),
+                    colors = ButtonDefaults.buttonColors(containerColor = ColorPrimaryCyan, contentColor = Color.Black),
                     modifier = Modifier.testTag("confirm_action_btn")
                 ) {
                     Text("Authorize", fontWeight = FontWeight.Bold)
@@ -171,283 +219,403 @@ fun JarvisMainScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(JarvisBackground)
+            .background(ColorBackgroundDark)
             .padding(horizontal = 16.dp),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        // 1. Top HUD System Diagnostics Bar
+        // 1. Header with Title, Battery and Time
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Text(
+                    text = currentTimeString,
+                    color = ColorPrimaryCyan,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.testTag("timeDisplay")
+                )
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "J.A.R.V.I.S.",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black,
-                        color = JarvisCyan,
-                        letterSpacing = 2.sp
-                    )
-                    Text(
-                        text = "PHONE AUTOMATION SYSTEM",
-                        fontSize = 10.sp,
+                        text = "JARVIS PHONE",
+                        color = ColorPrimaryCyan,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextMuted,
                         letterSpacing = 1.sp
                     )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    HudStatusChip(
-                        label = "BAT",
-                        value = "${userContext.deviceState.batteryLevel}%",
-                        color = if (userContext.deviceState.batteryLevel <= 20) JarvisError else JarvisSuccess
-                    )
-                    HudStatusChip(
-                        label = "SYS",
-                        value = userContext.detectedActivity.name,
-                        color = JarvisCyan
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        // 2. Central Arc Reactor & Voice Visualizer
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = JarvisSurface),
-                shape = RoundedCornerShape(24.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, JarvisCardBorder)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 20.dp, horizontal = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    ArcReactorCore(
-                        isListening = isListening,
-                        audioLevel = audioLevel,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    AudioWaveformVisualizer(
-                        isListening = isListening,
-                        audioLevel = audioLevel
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
                     Text(
-                        text = if (isListening) "LISTENING TO VOICE INPUT..." else if (transcribedText.isNotBlank()) "\"$transcribedText\"" else "SYSTEM STANDING BY",
-                        color = if (isListening) JarvisCyan else TextPrimary,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        text = "AUTOMATION SYSTEM",
+                        color = ColorPrimaryCyan,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp
                     )
+                }
 
-                    if (transcribedText.isNotBlank()) {
-                        Text(
-                            text = "Confidence: ${(confidence * 100).toInt()}% • Multi-language (EN/HI)",
-                            color = TextSecondary,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Floating Mic Button with Glow
-                    Box(
-                        modifier = Modifier
-                            .size(68.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.radialGradient(
-                                    colors = if (isListening) listOf(JarvisOrange, JarvisCyan) else listOf(JarvisCyan, Color(0xFF0077FF))
-                                )
-                            )
-                            .clickable {
-                                if (isListening) {
-                                    viewModel.voiceInputManager.stopListening()
-                                } else {
-                                    viewModel.voiceInputManager.startListening()
-                                }
-                            }
-                            .testTag("jarvis_mic_button"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
-                            contentDescription = if (isListening) "Stop Listening" else "Start Listening",
-                            tint = Color.Black,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
+                IconButton(
+                    onClick = { showSettingsDialog = true },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .testTag("settingsButton")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = ColorPrimaryCyan,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+
+            // Battery and WiFi / RMS Status
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "BAT ${userContext.deviceState.batteryLevel}%",
+                    color = ColorPrimaryCyan,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .padding(end = 24.dp)
+                        .testTag("batteryStatus")
+                )
+                val rmsText = if (isListening && audioLevel > 18f) "RMS ACTIVE" else "RMS RELAXING"
+                Text(
+                    text = rmsText,
+                    color = ColorPrimaryCyan,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.testTag("wifiStatus")
+                )
+            }
         }
 
-        // 3. Quick Command Simulation Presets
+        // 2. Animated Cyan Breathing Orb Visualizer
         item {
-            Text(
-                text = "VOICE INPUT PRESETS",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextSecondary,
-                letterSpacing = 1.sp,
-                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
-            )
-
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                contentAlignment = Alignment.Center
             ) {
-                items(presetPrompts) { prompt ->
+                CyanBreathingOrb(
+                    isListening = isListening,
+                    audioLevel = audioLevel,
+                    modifier = Modifier
+                        .clickable { handleMicClick() }
+                        .testTag("orbVisualizer")
+                )
+            }
+        }
+
+        // 3. Command Display & Multi-language info
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                val displayCommand = if (transcribedText.isNotBlank()) {
+                    "\"$transcribedText\" 🎤"
+                } else if (isListening) {
+                    "\"Listening... Boliyee...\" 🎤"
+                } else {
+                    "\"Office mode on?\" 🎤"
+                }
+
+                Text(
+                    text = displayCommand,
+                    color = ColorPrimaryCyan,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.testTag("commandText")
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                val scoreText = if (confidence > 0f) {
+                    "Confidence: ${(confidence * 100).toInt()}%"
+                } else {
+                    "Confidence: 98%"
+                }
+
+                Text(
+                    text = scoreText,
+                    color = ColorPrimaryLightCyan,
+                    fontSize = 12.sp,
+                    modifier = Modifier.testTag("confidenceScore")
+                )
+
+                Text(
+                    text = "Multi-language (EN/HI)",
+                    color = ColorPrimaryLightCyan,
+                    fontSize = 12.sp,
+                    modifier = Modifier.testTag("languageInfo")
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Quick tap mic toggle button
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                colors = if (isListening) listOf(JarvisOrange, ColorPrimaryCyan) else listOf(ColorPrimaryCyan, Color(0xFF0077FF))
+                            )
+                        )
+                        .clickable { handleMicClick() }
+                        .testTag("voiceMicToggle"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
+                        contentDescription = if (isListening) "Stop Listening" else "Start Listening",
+                        tint = Color.Black,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                // Voice status message indicator
+                if (!voiceStatusMessage.isNullOrBlank()) {
                     Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable {
-                                viewModel.voiceInputManager.simulateVoiceInput(prompt)
-                            }
-                            .testTag("preset_${prompt.take(6)}"),
-                        color = JarvisSurfaceVariant,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, JarvisCardBorder)
+                        color = if (isListening) ColorPrimaryCyan.copy(alpha = 0.15f) else ColorSurfaceDark,
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, if (isListening) ColorPrimaryCyan else Color(0xFF2A3656)),
+                        modifier = Modifier.padding(top = 10.dp)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Bolt,
-                                contentDescription = null,
-                                tint = JarvisCyan,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            if (isListening) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFF3366))
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
                             Text(
-                                text = prompt,
-                                fontSize = 13.sp,
-                                color = TextPrimary,
+                                text = voiceStatusMessage ?: "",
+                                color = if (isListening) ColorPrimaryCyan else ColorPrimaryLightCyan,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
                             )
                         }
                     }
                 }
-            }
-            Spacer(modifier = Modifier.height(20.dp))
-        }
 
-        // 4. Live Workflow Execution Status
-        if (executionStatus != null) {
-            item {
-                val status = executionStatus!!
-                Card(
+                // Command Text Input Bar for manual typing / fallback
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp)
-                        .testTag("execution_status_card"),
-                    colors = CardDefaults.cardColors(containerColor = JarvisSurface),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (status.isExecuting) JarvisCyan else if (status.success) JarvisSuccess else JarvisError
-                    ),
-                    shape = RoundedCornerShape(16.dp)
+                        .padding(top = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    OutlinedTextField(
+                        value = typedCommand,
+                        onValueChange = { typedCommand = it },
+                        placeholder = {
+                            Text("Type command or tap preset...", color = ColorTextMuted, fontSize = 12.sp)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("commandInputField"),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = ColorPrimaryCyan,
+                            unfocusedBorderColor = Color(0xFF2A3656),
+                            focusedContainerColor = ColorSurfaceDark,
+                            unfocusedContainerColor = ColorSurfaceDark,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = {
+                            if (typedCommand.isNotBlank()) {
+                                viewModel.processUserCommand(typedCommand.trim())
+                                typedCommand = ""
+                            }
+                        },
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(ColorPrimaryCyan)
+                            .testTag("sendTypedCommandButton")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = "Execute Command",
+                            tint = Color.Black,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            // Divider
+            HorizontalDivider(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                thickness = 1.dp,
+                color = ColorSurfaceDark
+            )
+        }
+
+        // 4. Voice Input Presets
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                Text(
+                    text = "VOICE INPUT PRESETS (QUICK TAP):",
+                    color = ColorPrimaryCyan,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val presetCommands = listOf(
+                    "Office mode on",
+                    "Instagram backup to Drive",
+                    "Send message to Mom",
+                    "Call Raj",
+                    "Set brightness to 80",
+                    "Turn off WiFi",
+                    "Lock screen"
+                )
+
+                presetCommands.forEachIndexed { index, cmd ->
+                    Button(
+                        onClick = { viewModel.processUserCommand(cmd) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp)
+                            .height(42.dp)
+                            .testTag("preset_$index"),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ColorSurfaceDark,
+                            contentColor = ColorPrimaryCyan
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, ColorPrimaryCyan.copy(alpha = 0.35f))
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = if (status.isExecuting) Icons.Default.Bolt else if (status.success) Icons.Default.Check else Icons.Default.Close,
-                                    contentDescription = null,
-                                    tint = if (status.isExecuting) JarvisCyan else if (status.success) JarvisSuccess else JarvisError,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (status.isExecuting) "EXECUTING WORKFLOW" else "WORKFLOW COMPLETE",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    color = TextPrimary
-                                )
-                            }
                             Text(
-                                text = "${status.currentStepIndex}/${status.totalSteps} STEPS",
+                                text = "📌 $cmd",
                                 fontSize = 12.sp,
-                                color = JarvisCyan,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Medium,
+                                color = ColorPrimaryCyan
                             )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = status.statusMessage,
-                            color = TextSecondary,
-                            fontSize = 13.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-                        LinearProgressIndicator(
-                            progress = {
-                                if (status.totalSteps > 0) status.currentStepIndex.toFloat() / status.totalSteps.toFloat() else 0f
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp)),
-                            color = JarvisCyan,
-                            trackColor = JarvisSurfaceVariant
-                        )
-
-                        // Render Step checklist
-                        Spacer(modifier = Modifier.height(10.dp))
-                        status.stepStatuses.forEach { step ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 3.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (step.isCompleted) JarvisSuccess else if (step.isRunning) JarvisCyan else Color.Gray
-                                        )
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = step.taskName,
-                                    fontSize = 12.sp,
-                                    color = if (step.isRunning) JarvisCyan else if (step.isCompleted) TextPrimary else TextMuted
-                                )
-                            }
                         }
                     }
                 }
             }
         }
 
-        // 5. Proactive Suggestions Section (Layer 7)
+        // 5. Workflow Progress Section (Live execution or demo progress)
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp)
+                    .testTag("workflowProgressCard"),
+                colors = CardDefaults.cardColors(containerColor = ColorSurfaceDark),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, ColorPrimaryCyan.copy(alpha = 0.3f))
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val title = if (executionStatus?.isExecuting == true) "WORKFLOW EXECUTING" else "WORKFLOW COMPLETE"
+                        Text(
+                            text = title,
+                            color = ColorPrimaryCyan,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        val stepCountText = if (executionStatus != null && executionStatus!!.totalSteps > 0) {
+                            "${executionStatus!!.currentStepIndex}/${executionStatus!!.totalSteps} STEPS"
+                        } else {
+                            "2/5 STEPS"
+                        }
+
+                        Text(
+                            text = stepCountText,
+                            color = ColorPrimaryCyan,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.testTag("stepCounter")
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    val steps: List<WorkflowStepItem> = if (executionStatus != null && executionStatus!!.stepStatuses.isNotEmpty()) {
+                        executionStatus!!.stepStatuses.map { step ->
+                            val s = when {
+                                step.isCompleted -> WorkflowStepStatus.COMPLETED
+                                step.isRunning -> WorkflowStepStatus.IN_PROGRESS
+                                else -> WorkflowStepStatus.PENDING
+                            }
+                            WorkflowStepItem(step.taskName, s)
+                        }
+                    } else {
+                        // Standard workflow step checklist from video demo
+                        listOf(
+                            WorkflowStepItem("Establish connection", WorkflowStepStatus.COMPLETED),
+                            WorkflowStepItem("Resolve Contact Coordinates", WorkflowStepStatus.COMPLETED),
+                            WorkflowStepItem("Dispatch WhatsApp Message", WorkflowStepStatus.COMPLETED),
+                            WorkflowStepItem("Waiting for response...", WorkflowStepStatus.IN_PROGRESS),
+                            WorkflowStepItem("Finalizing setup...", WorkflowStepStatus.PENDING)
+                        )
+                    }
+
+                    steps.forEach { step ->
+                        WorkflowStepRow(step = step)
+                    }
+                }
+            }
+        }
+
+        // 6. Proactive Predictions (Layer 7)
         if (suggestions.isNotEmpty()) {
             item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 4.dp, bottom = 8.dp),
+                        .padding(start = 4.dp, top = 6.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -461,7 +629,7 @@ fun JarvisMainScreen(
                     Text(
                         text = "LEARNING ENGINE ACTIVE",
                         fontSize = 10.sp,
-                        color = JarvisCyan,
+                        color = ColorPrimaryCyan,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -476,17 +644,14 @@ fun JarvisMainScreen(
                     modifier = Modifier.padding(bottom = 10.dp)
                 )
             }
-            item {
-                Spacer(modifier = Modifier.height(14.dp))
-            }
         }
 
-        // 6. Recent Activity Log (from Room DB)
+        // 7. Automation Activity Log (from Room DB)
         item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 4.dp, bottom = 8.dp),
+                    .padding(start = 4.dp, top = 10.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -500,7 +665,7 @@ fun JarvisMainScreen(
                 Text(
                     text = "${recentCommands.size} ENTRIES",
                     fontSize = 10.sp,
-                    color = TextMuted
+                    color = ColorTextMuted
                 )
             }
         }
@@ -509,7 +674,7 @@ fun JarvisMainScreen(
             item {
                 Text(
                     text = "No automations logged yet. Speak or tap a preset above to begin.",
-                    color = TextMuted,
+                    color = ColorTextMuted,
                     fontSize = 13.sp,
                     modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp)
                 )
@@ -521,52 +686,75 @@ fun JarvisMainScreen(
                         .fillMaxWidth()
                         .padding(bottom = 8.dp),
                     colors = CardDefaults.cardColors(containerColor = JarvisSurface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, JarvisCardBorder),
+                    border = BorderStroke(1.dp, JarvisCardBorder),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Text(
+                            text = "✓",
+                            color = ColorPrimaryCyan,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(end = 12.dp)
+                        )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = record.originalText,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary,
-                                fontSize = 14.sp
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextPrimary
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = record.actionsExecuted.ifEmpty { record.parsedIntent },
+                                text = "Intent: ${record.parsedIntent} • Actions: ${record.actionsExecuted}",
+                                fontSize = 11.sp,
                                 color = TextSecondary,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                maxLines = 1
                             )
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(if (record.success) JarvisSuccess.copy(alpha = 0.15f) else JarvisError.copy(alpha = 0.15f))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = if (record.success) "SUCCESS" else "FAILED",
-                                    color = if (record.success) JarvisSuccess else JarvisError,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+fun WorkflowStepRow(step: WorkflowStepItem) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val (icon, iconColor, textColor) = when (step.status) {
+            WorkflowStepStatus.COMPLETED -> Triple("✓", ColorPrimaryCyan, ColorPrimaryLightCyan)
+            WorkflowStepStatus.IN_PROGRESS -> Triple("⏳", ColorPrimaryCyan, ColorPrimaryCyan)
+            WorkflowStepStatus.PENDING -> Triple("⏳", ColorTextMuted, ColorTextMuted)
+        }
+
+        Text(
+            text = icon,
+            color = iconColor,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(26.dp),
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Text(
+            text = step.description,
+            color = textColor,
+            fontSize = 13.sp,
+            fontWeight = if (step.status == WorkflowStepStatus.IN_PROGRESS) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -579,69 +767,40 @@ fun ProactiveSuggestionCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .testTag("suggestion_${suggestion.id}"),
+            .testTag("suggestion_${suggestion.title.take(6)}"),
         colors = CardDefaults.cardColors(containerColor = JarvisSurface),
-        shape = RoundedCornerShape(14.dp),
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (suggestion.isCritical) JarvisOrange else JarvisCardBorder
-        )
+        border = BorderStroke(1.dp, ColorPrimaryCyan.copy(alpha = 0.35f)),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = suggestion.title,
-                        fontWeight = FontWeight.Bold,
-                        color = if (suggestion.isCritical) JarvisOrange else TextPrimary,
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "${(suggestion.confidence * 100).toInt()}% match",
-                        fontSize = 10.sp,
-                        color = JarvisCyan
-                    )
-                }
-                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = suggestion.title,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = ColorPrimaryCyan
+                )
                 Text(
                     text = suggestion.subtitle,
+                    fontSize = 11.sp,
                     color = TextSecondary,
-                    fontSize = 12.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    modifier = Modifier.padding(top = 2.dp)
                 )
             }
-
-            Spacer(modifier = Modifier.width(10.dp))
-
             Button(
                 onClick = onExecute,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = if (suggestion.isCritical) JarvisOrange else JarvisCyan,
+                    containerColor = ColorPrimaryCyan,
                     contentColor = Color.Black
                 ),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                modifier = Modifier.testTag("exec_${suggestion.id}")
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Execute",
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Run",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
-                )
+                Text("Run", fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

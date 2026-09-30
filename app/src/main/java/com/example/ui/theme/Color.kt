@@ -18,3 +18,10 @@ val JarvisError = Color(0xFFFF5252)
 val TextPrimary = Color(0xFFE2F1FF)
 val TextSecondary = Color(0xFF8BA5C4)
 val TextMuted = Color(0xFF557094)
+
+val ColorBackgroundDark = Color(0xFF0A0E27)
+val ColorSurfaceDark = Color(0xFF003D5C)
+val ColorPrimaryCyan = Color(0xFF00D4FF)
+val ColorPrimaryLightCyan = Color(0xFF7DD3FC)
+val ColorTextMuted = Color(0xFF4A5A7A)
+

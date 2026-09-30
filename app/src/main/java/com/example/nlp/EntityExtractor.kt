@@ -90,6 +90,10 @@ class EntityExtractor {
             foundSetting = "SILENT_MODE"
         } else if (text.contains("vibrate")) {
             foundSetting = "VIBRATE_MODE"
+        } else if (text.contains("lock") || text.contains("unlock")) {
+            foundSetting = if (text.contains("unlock")) "UNLOCK_SCREEN" else "LOCK_SCREEN"
+        } else if (text.contains("airplane")) {
+            foundSetting = "AIRPLANE_MODE"
         }
 
         // 4. Time Extraction
@@ -141,5 +145,34 @@ class EntityExtractor {
             isUrgent = isUrgent,
             isNegated = isNegated
         )
+    }
+
+    fun fuzzyMatch(name: String, text: String, threshold: Float = 0.7f): Boolean {
+        val words = text.split("\\s+".toRegex())
+        for (word in words) {
+            val dist = levenshteinDistance(name.lowercase(), word.lowercase())
+            val maxLen = maxOf(name.length, word.length)
+            if (maxLen > 0) {
+                val similarity = 1.0f - (dist.toFloat() / maxLen)
+                if (similarity >= threshold) return true
+            }
+        }
+        return false
+    }
+
+    fun levenshteinDistance(s1: String, s2: String): Int {
+        val dp = Array(s1.length + 1) { IntArray(s2.length + 1) }
+        for (i in 0..s1.length) dp[i][0] = i
+        for (j in 0..s2.length) dp[0][j] = j
+        for (i in 1..s1.length) {
+            for (j in 1..s2.length) {
+                if (s1[i - 1] == s2[j - 1]) {
+                    dp[i][j] = dp[i - 1][j - 1]
+                } else {
+                    dp[i][j] = 1 + minOf(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+                }
+            }
+        }
+        return dp[s1.length][s2.length]
     }
 }

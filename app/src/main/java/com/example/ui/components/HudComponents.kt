@@ -210,3 +210,81 @@ fun HudStatusChip(
         )
     }
 }
+
+/**
+ * Animated Cyan Breathing Orb as demonstrated in the automation system video.
+ * Features concentric pulsing rings with alpha falloff and a radiant cyan radial core.
+ */
+@Composable
+fun CyanBreathingOrb(
+    isListening: Boolean,
+    audioLevel: Float,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "cyan_breathing_orb")
+    val time by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 6.28318f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = if (isListening) 1200 else 2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "time"
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(200.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(200.dp)) {
+            val center = Offset(size.width / 2f, size.height / 2f)
+            val baseScale = size.minDimension / 400f
+            val audioBoost = if (isListening) (audioLevel.coerceIn(0f, 100f) / 100f) * 16f else 0f
+
+            // 1. Draw concentric outer breathing rings
+            for (i in 3 downTo 1) {
+                val sinWave = kotlin.math.sin(time + (i * 0.4f)).toFloat()
+                val radius = (50f + i * 25f + (sinWave * 5f) + (audioBoost * i * 0.5f)) * baseScale * 2f
+                val alpha = (0.35f / i).coerceIn(0.08f, 0.5f)
+                drawCircle(
+                    color = Color(0xFF00D4FF).copy(alpha = alpha),
+                    radius = radius,
+                    center = center,
+                    style = Stroke(width = 2.5f)
+                )
+            }
+
+            // 2. Draw center radiant orb with radial gradient
+            val pulse = kotlin.math.sin(time * 2f).toFloat() * 3f + (audioBoost * 0.8f)
+            val orbRadius = (32f + pulse) * baseScale * 2f
+
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFF00D4FF),
+                        Color(0x4D0096C8),
+                        Color.Transparent
+                    ),
+                    center = center,
+                    radius = orbRadius * 1.6f
+                ),
+                radius = orbRadius * 1.6f,
+                center = center
+            )
+
+            // Inner glowing core
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color.White, Color(0xFF00D4FF)),
+                    center = center,
+                    radius = orbRadius
+                ),
+                radius = orbRadius,
+                center = center
+            )
+        }
+    }
+}
+

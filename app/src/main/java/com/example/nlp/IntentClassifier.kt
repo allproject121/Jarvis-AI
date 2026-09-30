@@ -87,6 +87,15 @@ class IntentClassifier {
             )
         }
 
+        // Lock / Unlock Screen
+        if (text.contains("lock") || text.contains("unlock") || entities.settingName == "LOCK_SCREEN" || entities.settingName == "UNLOCK_SCREEN") {
+            return IntentClassificationResult(
+                intent = JarvisIntent.LOCK_UNLOCK_SCREEN,
+                confidence = 0.96f,
+                complexity = complexity
+            )
+        }
+
         // Settings (WiFi, Brightness, Bluetooth, Volume, etc.)
         if (entities.settingName != null || text.contains("wifi") || text.contains("brightness") || text.contains("bluetooth") || text.contains("volume") || text.contains("mode")) {
             val intent = if (text.contains("work mode") || text.contains("night mode") || text.contains("silent")) {

@@ -9,7 +9,8 @@ data class NLPResult(
     val confidence: Float,
     val complexity: CommandComplexity,
     val entities: ExtractedEntities,
-    val implicitRoutine: String? = null
+    val implicitRoutine: String? = null,
+    val isValid: Boolean = true
 )
 
 class NLPEngine {
@@ -35,7 +36,8 @@ class NLPEngine {
             confidence = classification.confidence,
             complexity = classification.complexity,
             entities = resolvedEntities,
-            implicitRoutine = implicit
+            implicitRoutine = implicit,
+            isValid = classification.confidence > 0.75f && classification.intent != JarvisIntent.UNKNOWN
         )
     }
 }

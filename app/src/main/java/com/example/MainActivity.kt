@@ -39,6 +39,10 @@ import com.example.ui.JarvisMainScreen
 import com.example.ui.JarvisTab
 import com.example.ui.MainViewModel
 import com.example.ui.SystemHudScreen
+import com.example.ui.theme.ColorBackgroundDark
+import com.example.ui.theme.ColorPrimaryCyan
+import com.example.ui.theme.ColorSurfaceDark
+import com.example.ui.theme.ColorTextMuted
 import com.example.ui.theme.JarvisBackground
 import com.example.ui.theme.JarvisCardBorder
 import com.example.ui.theme.JarvisCyan
@@ -107,7 +111,7 @@ fun JarvisBottomNav(
 ) {
     NavigationBar(
         modifier = modifier.testTag("jarvis_bottom_nav"),
-        containerColor = JarvisSurface,
+        containerColor = ColorBackgroundDark,
         tonalElevation = 8.dp
     ) {
         val items = listOf(
@@ -138,11 +142,11 @@ fun JarvisBottomNav(
                     )
                 },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Color.Black,
-                    selectedTextColor = JarvisCyan,
-                    indicatorColor = JarvisCyan,
-                    unselectedIconColor = TextSecondary,
-                    unselectedTextColor = TextMuted
+                    selectedIconColor = ColorPrimaryCyan,
+                    selectedTextColor = ColorPrimaryCyan,
+                    indicatorColor = ColorSurfaceDark,
+                    unselectedIconColor = ColorTextMuted,
+                    unselectedTextColor = ColorTextMuted
                 ),
                 modifier = Modifier.testTag("nav_tab_${tab.name.lowercase()}")
             )

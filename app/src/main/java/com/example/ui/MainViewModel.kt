@@ -139,6 +139,25 @@ class MainViewModel @JvmOverloads constructor(
     private val _isApiKeyConfigured = MutableStateFlow(geminiClient.isApiKeyConfigured())
     val isApiKeyConfigured: StateFlow<Boolean> = _isApiKeyConfigured.asStateFlow()
 
+    private val _voiceStatusMessage = MutableStateFlow<String?>("Ready for voice commands")
+    val voiceStatusMessage: StateFlow<String?> = _voiceStatusMessage.asStateFlow()
+
+    fun toggleListening() {
+        if (voiceInputManager.isListening.value) {
+            voiceInputManager.stopListening()
+        } else {
+            voiceInputManager.startListening()
+        }
+    }
+
+    fun startListening() {
+        voiceInputManager.startListening()
+    }
+
+    fun stopListening() {
+        voiceInputManager.stopListening()
+    }
+
     private val _showApiKeyDialog = MutableStateFlow(false)
     val showApiKeyDialog: StateFlow<Boolean> = _showApiKeyDialog.asStateFlow()
 
@@ -189,17 +208,30 @@ class MainViewModel @JvmOverloads constructor(
 
     private fun setupVoiceListener() {
         voiceInputManager.listener = object : SpeechRecognitionListener {
-            override fun onPartialResult(text: String, confidence: Float) {}
+            override fun onPartialResult(text: String, confidence: Float) {
+                _voiceStatusMessage.value = "Listening: \"$text...\""
+            }
 
             override fun onFinalResult(text: String, confidence: Float) {
                 if (text.isNotBlank()) {
+                    _voiceStatusMessage.value = "Recognized: \"$text\""
                     handleVoiceCommand(text)
                 }
             }
 
-            override fun onError(errorCode: Int, message: String) {}
+            override fun onError(errorCode: Int, message: String) {
+                _voiceStatusMessage.value = message
+            }
+
             override fun onAudioLevelChanged(level: Float) {}
-            override fun onListeningStateChanged(isListening: Boolean) {}
+
+            override fun onListeningStateChanged(isListening: Boolean) {
+                if (isListening) {
+                    _voiceStatusMessage.value = "Listening... Boliyee / Speak now"
+                } else if (_voiceStatusMessage.value?.startsWith("Listening") == true) {
+                    _voiceStatusMessage.value = "Processing command..."
+                }
+            }
         }
     }
 
@@ -219,6 +251,8 @@ class MainViewModel @JvmOverloads constructor(
     /**
      * Complete 7-layer unified pipeline execution
      */
+    fun processUserCommand(commandText: String) = handleVoiceCommand(commandText)
+
     fun handleVoiceCommand(commandText: String) {
         viewModelScope.launch {
             val history = recentCommands.value
