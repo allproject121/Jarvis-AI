@@ -55,9 +55,10 @@ data class GeneratedImageItem(
     val timestamp: Long = System.currentTimeMillis()
 )
 
-class MainViewModel(
+class MainViewModel @JvmOverloads constructor(
     application: Application,
-    private val appContainer: AppContainer = (application as JarvisApp).container
+    private val appContainer: AppContainer = (application as? JarvisApp)?.container
+        ?: com.example.di.AppDependencyProvider.getContainer(application)
 ) : AndroidViewModel(application) {
 
     val repository: JarvisRepository = appContainer.jarvisRepository
