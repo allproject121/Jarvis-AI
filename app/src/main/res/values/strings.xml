@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">JARVIS</string>
+    <string name="app_tagline">Intelligent Phone Automation System</string>
+    <string name="listening_status">JARVIS Listening…</string>
+    <string name="tap_to_speak">Tap to Speak</string>
+    <string name="accessibility_service_description">JARVIS Intelligent Automation Service powers autonomous UI interactions, screen reading, and multi-step app workflows.</string>
+</resources>

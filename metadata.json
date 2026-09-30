@@ -1,0 +1,6 @@
+{
+  "name": "JARVIS",
+  "description": "Intelligent Phone Automation System with voice control, multi-step workflow planner, proactive routines, and Gemini AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
