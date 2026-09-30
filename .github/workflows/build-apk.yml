@@ -152,21 +152,17 @@ jobs:
           TAG="debug-apk-build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
           TITLE="Debug APK Build #${GITHUB_RUN_NUMBER}"
 
-          cat << 'EOF' > "${RUNNER_TEMP}/release-notes.md"
+          cat << EOF > "${RUNNER_TEMP}/release-notes.md"
           ## Debug APK Build Notes
           - **Type:** Automatically generated debug APK
           - **Build Engine:** GitHub Actions
           - **Workflow Run Number:** Run #${GITHUB_RUN_NUMBER}
           - **Run Attempt:** Attempt #${GITHUB_RUN_ATTEMPT}
-          - **Source Commit:** `${GITHUB_SHA}`
+          - **Source Commit:** \`${GITHUB_SHA}\`
           - **Purpose:** Intended for testing and development verification
           - **Notice:** This is not a Play Store production release
           - **Signing:** Signed only with a temporary debug keystore
           EOF
-
-          sed -i "s/\${GITHUB_RUN_NUMBER}/${GITHUB_RUN_NUMBER}/g" "${RUNNER_TEMP}/release-notes.md"
-          sed -i "s/\${GITHUB_RUN_ATTEMPT}/${GITHUB_RUN_ATTEMPT}/g" "${RUNNER_TEMP}/release-notes.md"
-          sed -i "s/\${GITHUB_SHA}/${GITHUB_SHA}/g" "${RUNNER_TEMP}/release-notes.md"
 
           echo "Creating release $TAG for target commit $GITHUB_SHA..."
           gh release create "$TAG" "$ASSET_PATH" \
